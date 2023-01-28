@@ -1,6 +1,8 @@
 import tkinter as tk
 import socket
+import server
 from tkinter import filedialog
+
 
 window = tk.Tk()  # Invocar TK en window
 #IP
@@ -32,6 +34,7 @@ def explorar(): #File browser
     fblbl.configure(text="Archivo: " + nombre)
     fbroot.insert(0,nombre)
 
+
 fblbl = tk.Label(window, text="Seleccionar Archivo Cia:")
 fbroot = tk.Entry(window, bd=6)
 fbroot.place(x=150, y=100)
@@ -57,7 +60,8 @@ def test():
     print(a,b,c,d)
     return([a,b,c,d])
 
-punch = tk.Button(window, text="Send", fg="green",command=lambda:test())# Boton de Prueba
+
+punch = tk.Button(window, text="Send", fg="green",command=lambda:server.startServer(a, b, c, d))# Boton de Prueba
 punch.place(x=100, y=150)
 window.title("Prueba Gay")
 window.geometry("300x200")
