@@ -144,19 +144,23 @@ def Send(ipclient,hostip,filelist,alert):
 
     print("Filelist before sending:", filelist)
 
-    hostIp = [(s.connect(('8.8.8.8', 53)), s.getsockname()[0], s.close()) for s in
+    clientIp = ipclient.get()
+    hostIp = hostip.get()
+
+    if not hostIp:
+        hostIp = [(s.connect(('8.8.8.8', 53)), s.getsockname()[0], s.close()) for s in
                    [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
+    
     hostPort = 8080
 
-    clientIp = ipclient.get()
-    clientPort = hostip.get()
+    print("IPP : "+hostIp)
 
     server = StartServer(hostIp,hostPort)
     filebytes = PrepareSend(filelist,hostIp,hostPort,alert)
 
     try:
         sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-        sock.connect(("192.168.0.27",5000))
+        sock.connect(("clientIp",5000))
         sock.sendall(struct.pack('!L',len(filebytes))+filebytes)
         while len(sock.recv(1)) < 1:
             time.sleep(0.05)
