@@ -160,7 +160,7 @@ def Send(ipclient,hostip,filelist,alert):
 
     try:
         sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-        sock.connect(("clientIp",5000))
+        sock.connect((clientIp,5000))
         sock.sendall(struct.pack('!L',len(filebytes))+filebytes)
         while len(sock.recv(1)) < 1:
             time.sleep(0.05)
