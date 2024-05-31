@@ -69,30 +69,45 @@ def UIWindow():
     hostip.grid(column=1, row=4)
 
     #Subir
-    enviar = customtkinter.CTkButton(app, text='Enviar', width=140, height=28,command=lambda:Send(ipclient,hostip,filelist,alert))
+    enviar = customtkinter.CTkButton(app, text='Enviar', width=140, height=28,command=lambda:Send(ipclient,hostip,filelist,alert,progresoTarea,porcentaje,cola))
     enviar.grid(column=0, row=5, columnspan=2)
 
     #Alerta
     alert = customtkinter.CTkLabel(app, text='', width=40, height=28, fg_color='transparent')
     alert.grid(column=0 ,row=6, columnspan=2)
 
+    #Progressbar
+    progresoTarea = customtkinter.CTkProgressBar(app, orientation='horizontal',mode="determinate",determinate_speed=1,progress_color="#2fa572",width=200)
+    progresoTarea.set(-1)
+    progresoTarea.grid(column=0, row=8,columnspan=2, pady=10)
+    cola = customtkinter.CTkLabel(app, text='', width=40, height=28, fg_color='transparent')
+    cola.grid(column=0 ,row=7)
+    porcentaje = customtkinter.CTkLabel(app, text='', width=40, height=28, fg_color='transparent')
+    porcentaje.grid(column=1 ,row=7)
+
     #Frame
     frame = customtkinter.CTkFrame(app, width=350, height=200)
-    frame.grid(column=0, row=7, columnspan = 2)
+    frame.grid(column=0, row=9, columnspan = 2)
+
     #Table
     filetable = CTkTable(master=frame,column=2,header_color="#2fa572")
-    filetable.grid(column=0, row=7, columnspan = 2, sticky="ew" ,padx=20,pady=20)
+    filetable.grid(column=0, row=9, columnspan = 2, sticky="ew" ,padx=20,pady=20)
     filetable.insert(row=0,column=0, value="Directorio")
     filetable.insert(row=0,column=1, value="Archivo")
     filetable.delete_row(1)
 
     def filePicker(alert,filelist,filetable):
-        files = customtkinter.filedialog.askopenfiles(title="Seleccionar Archivo o Carpeta",filetypes=(fileExtension))
-        alert.configure(text="")
+        
+        files = customtkinter.filedialog.askopenfiles(title="Seleccionar Archivo o Carpeta",filetypes=(fileExtension))#Seleccionar Archivos
+        alert.configure(text="",text_color="white") #Limpiar Alertas
+        filelist.clear() #Limpiar Lista de archivos
+
+        #Limpiar Tabla
         while filetable.rows > 1:
             a = filetable.rows
             filetable.delete_row(a)
 
+        #Si la lista no esta vacia llenar la tabla y crear la lista de archivos
         if files:
             for index, file in enumerate(files):
                 file_path = file.name
@@ -111,20 +126,20 @@ def UIWindow():
     #RunCTk
     app.mainloop()
 
-
-def StartServer(hostIp, hostPort):
+def StartServer(hostIp, hostPort,alert):
     try:
-        print("Opening HTTP server on {}:{}".format(hostIp, hostPort))
         server = TCPServer((hostIp, hostPort), SimpleHTTPRequestHandler)
         thread = threading.Thread(target=server.serve_forever)
-        thread.start()
+        thread.start()       
         return server
+    
     except Exception as e:
         print("Error starting server:", e)
         return None
 
 def PrepareSend(filelist,hostIP,hostPort,alert):
 
+    alert.configure(text="Preparando Envio... ",text_color="white")
     #crear path y url
     baseUrl = hostIP+":"+str(hostPort)+"/"
     fileurl = ''
@@ -132,6 +147,7 @@ def PrepareSend(filelist,hostIP,hostPort,alert):
     for file in filelist:
         filepath = file.strip()
         fileurl += baseUrl+quote(os.path.basename(filepath))+'\n'
+
     #inicializar lista de bytes
     filelistbytes = fileurl.encode("ascii")
     #Cambiar directorio para servir archivos
@@ -140,37 +156,55 @@ def PrepareSend(filelist,hostIP,hostPort,alert):
 
     return filelistbytes
 
-def Send(ipclient,hostip,filelist,alert):
-
-    print("Filelist before sending:", filelist)
-
+def Send(ipclient,hostip,filelist,alert,progresoTarea,porcentaje,cola):
+    
+    #Obtener datos
     clientIp = ipclient.get()
     hostIp = hostip.get()
 
+    if not clientIp:
+        alert.configure(text="IP 3DS No puede quedar en blanco",text_color="red")
+        
+    
     if not hostIp:
         hostIp = [(s.connect(('8.8.8.8', 53)), s.getsockname()[0], s.close()) for s in
-                   [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
-    
-    hostPort = 8080
+                    [socket.socket(socket.AF_INET, socket.SOCK_DGRAM)]][0][1]
 
-    print("IPP : "+hostIp)
+    server = StartServer(hostIp,8080,alert)
 
-    server = StartServer(hostIp,hostPort)
     filebytes = PrepareSend(filelist,hostIp,hostPort,alert)
+    DataThread(clientIp,filebytes,alert,progresoTarea,porcentaje,cola)
 
+    server.shutdown()
+
+def DataTransfer(clientIp,filebytes,alert,progresoTarea,porcentaje,cola):
+
+    #Iniciar Transferencia
     try:
         sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
         sock.connect((clientIp,5000))
         sock.sendall(struct.pack('!L',len(filebytes))+filebytes)
         while len(sock.recv(1)) < 1:
             time.sleep(0.05)
-        sock.close()
+        alert.configure(text="Envio Exitoso", text_color="#2fa572")
 
     except Exception as e:
+        alert.configure(text="Envio Fallido", text_color="red")
         print('An error occurred: ' + str(e))
         return False
-    server.shutdown()
-    return True
+    
+    finally:
+        sock.close()
+
+def DataThread(clientIp,filebytes,alert,progresoTarea,porcentaje,cola):
+    transferthread = threading.Thread(target=DataTransfer,args=(clientIp,filebytes,alert,progresoTarea,porcentaje,cola))
+    transferthread.start()
+
+def main():
+    event = threading.Event()
+    ui_thread = threading.Thread(target=UIWindow)
+    ui_thread.start()
+    event.wait()
 
 if __name__ == "__main__":
-    UIWindow()
+    main()
